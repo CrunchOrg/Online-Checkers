@@ -1,0 +1,24 @@
+# Compiles the code and runs the tests on every pull request into main.
+# A pull request cannot merge while this check fails.
+name: build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+          cache: maven
+
+      - name: Compile and test
+        run: mvn -B verify

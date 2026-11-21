@@ -1,0 +1,46 @@
+# The assignment says: no generated files, build artifacts, temporary files,
+# IDE-specific files, or dependency folders that setup instructions can recreate.
+
+# Maven build output
+target/
+
+# Compiled Java
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+*.war
+*.log
+
+# Eclipse
+.project
+.classpath
+.settings/
+.factorypath
+.apt_generated/
+bin/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
+
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+
+# Gradle (the team builds with Maven)
+.gradle/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git bundles made for Canvas submission
+*.bundle
