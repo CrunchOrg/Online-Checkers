@@ -8,10 +8,10 @@ Two players run a Java Swing client on their own machines and connect over TCP t
 
 | Member | GitHub |
 | --- | --- |
-| Angelo Adducci | |
+| Angelo Adducci | `CrunchAstro` |
 | Juan De La Garza | `jdelagar` |
-| Rylin Quintana | |
-| Audrey Western | |
+| Rylin Quintana | `QQuintana` |
+| Audrey Western | `audreyw9785` |
 
 ## Requirements
 
