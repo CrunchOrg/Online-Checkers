@@ -80,12 +80,12 @@ More detail:
 
 | Path | What |
 | --- | --- |
-| `src/main/java/org/example/Server.java` | Accepts connections on port 1234, pairs players, starts a `GameSession` per pair |
-| `src/main/java/org/example/ClientHandler.java` | One per connected client, on its own thread: reads and writes that client's messages |
-| `src/main/java/org/example/GameSession.java` | One game: the authoritative board, turns, move validation, captures, kings, win detection |
-| `src/main/java/org/example/GameMessage.java` | The message format, serialized to JSON with Gson |
-| `src/main/java/org/example/Client.java` | Connects to the server, listens for messages, sends move requests |
-| `src/main/java/org/example/GameBoard.java` | The client's Swing window and 8x8 board |
+| `src/main/java/checkers/Server.java` | Accepts connections on port 1234, pairs players, starts a `GameSession` per pair |
+| `src/main/java/checkers/ClientHandler.java` | One per connected client, on its own thread: reads and writes that client's messages |
+| `src/main/java/checkers/GameSession.java` | One game: the authoritative board, turns, move validation, captures, kings, win detection |
+| `src/main/java/checkers/GameMessage.java` | The message format, serialized to JSON with Gson |
+| `src/main/java/checkers/Client.java` | Connects to the server, listens for messages, sends move requests |
+| `src/main/java/checkers/GameBoard.java` | The client's Swing window and 8x8 board |
 | `src/main/java/org/Checkers/checkers.java` | The original single-machine game, kept as a reference until its code has moved into the classes above |
 | `src/test/java/` | Unit tests for each phase's testing checkpoint (added as each phase lands) |
 | `docs/` | Architecture and protocol documentation |

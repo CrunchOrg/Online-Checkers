@@ -57,13 +57,13 @@
                     <execution>
                         <id>server</id>
                         <configuration>
-                            <mainClass>org.example.Server</mainClass>
+                            <mainClass>checkers.Server</mainClass>
                         </configuration>
                     </execution>
                     <execution>
                         <id>client</id>
                         <configuration>
-                            <mainClass>org.example.Client</mainClass>
+                            <mainClass>checkers.Client</mainClass>
                         </configuration>
                     </execution>
                 </executions>
