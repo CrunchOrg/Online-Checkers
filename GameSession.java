@@ -22,10 +22,6 @@ public class GameSession {
         
     	this.player1 = player1;
         this.player2 = player2;
-        
-        initializeBoard();
-        
-        System.out.println("New Game Session started between two players!");
 
     }
     
@@ -249,10 +245,10 @@ public class GameSession {
 
         boardState[fromRow][fromCol] = EMPTY;
 
-        //calculate middle coordinates to delete captured piece
-
+     // Calculate middle coordinates to delete captured piece
+        
         int middleRow = fromRow + ((toRow - fromRow) / 2);
-
+        
         int middleCol = fromCol + ((toCol - fromCol) / 2);
 
         boardState[middleRow][middleCol] = EMPTY;
@@ -439,9 +435,9 @@ public class GameSession {
     
     //Send an error to a player attempting an invalid move
     private void invalidMove(ClientHandler player, String reason) {
-    	//Create an invalid move message
+    	
         GameMessage message = new GameMessage(GameMessage.INVALID_MOVE);
-        //Give the message the reason for the invalid move
+        //Give invalid move reason
         message.setMessage(reason);
         //Send invalid move message only to the player who made it
         player.sendMessage(message);
@@ -465,23 +461,236 @@ public class GameSession {
     }
     
     //Assigns players and sends the starting board
-    private void startGame() {
-    	
+    public synchronized void startGame() {
+
+        //Reset game state
+        gameOver = false;
+        currentTurn = RED;
+        isChainJumping = false;
+        selectedRow = -1;
+        selectedCol = -1;
+
+        //Initialize the board
+        initializeBoard();
+
+        //Create player 1 assignment message
+        GameMessage player1Message = new GameMessage(GameMessage.ASSIGN_PLAYER);
+        player1Message.setPlayerNumber(1);
+        
+      //Create player 2 assignment message
+        GameMessage player2Message = new GameMessage(GameMessage.ASSIGN_PLAYER);
+        player2Message.setPlayerNumber(2);
+
+        //Send player assignment messages to both players
+        player1.sendMessage(player1Message);
+        player2.sendMessage(player2Message);
+
+        //Notify both players that the game has started
+        GameMessage startMessage = new GameMessage(GameMessage.GAME_START);
+        startMessage.setCurrentTurn(currentTurn);
+
+        player1.sendMessage(startMessage);
+        player2.sendMessage(startMessage);
+
+        //Send the initial board state to both players
+        updateBoard();
+
+        System.out.println("Game started! Player 1 is Red. Player 2 is Black.");
     }
     
     //Receives and validates move requests then executes it
-    private void processMove(GameMessage move, ClientHandler sender) {
-    	
+    public synchronized void processMove(GameMessage move, ClientHandler sender) {
+
+        // Variables
+        int playerColor;
+        int fromRow;
+        int fromCol;
+        int toRow;
+        int toCol;
+        int rowDistance;
+        
+        // Check if message is null
+        if (move == null) {
+            return;
+        }
+
+        //Check if the game is over
+        if (gameOver) {
+            invalidMove(sender, "The game is already over.");
+            return;
+        }
+
+        //Check if the sender is part of this game
+        if (sender != player1 && sender != player2) {
+            return;
+        }
+
+        //Determine the player's color
+        playerColor = getPlayerColor(sender);
+
+        //Check if it is the player's turn, if not send invalid move message
+        if (playerColor != currentTurn) {
+            invalidMove(sender, "It is not your turn.");
+            return;
+        }
+
+        //Get the move coordinates
+        fromRow = move.getFromRow();
+        fromCol = move.getFromColumn();
+        toRow = move.getToRow();
+        toCol = move.getToColumn();
+
+        //Check if the coordinates are within the board
+        if (fromRow < 0 || fromRow > 7 ||
+            fromCol < 0 || fromCol > 7 ||
+            toRow < 0 || toRow > 7 ||
+            toCol < 0 || toCol > 7) {
+
+            invalidMove(sender, "Coordinates are outside the board.");
+            return;
+        }
+
+        //Check if the starting square contains the player's piece
+        if (!isPlayerPiece(boardState[fromRow][fromCol], playerColor)) {
+        	
+            invalidMove(sender, "You cannot move that piece.");           
+            return;
+        }
+
+        //Calculate the row distance
+        rowDistance = Math.abs(toRow - fromRow);
+
+        //Check if the player is currently chain jumping
+        if (isChainJumping) {
+
+            //The player must continue with the same piece
+            if (fromRow != selectedRow || fromCol != selectedCol) {
+            	
+                invalidMove(sender, "You must continue jumping with the same piece.");               
+                return;
+            }
+
+            //Check if the next jump is valid
+            if (!isValidJump(fromRow, fromCol, toRow, toCol)) {
+            	
+                invalidMove(sender, "Invalid chain jump.");               
+                return;
+            }
+
+            //Execute the jump
+            executeJump(fromRow, fromCol, toRow, toCol);
+        }
+
+        //Handle normal moves and jumps
+        else {
+
+            //Handle a non-capture move
+            if (rowDistance == 1) {
+
+                if (!isValidMove(fromRow, fromCol, toRow, toCol)) {
+                	
+                    invalidMove(sender, "Invalid move.");                    
+                    return;
+                }
+
+                executeMove(fromRow, fromCol, toRow, toCol);
+            }
+
+            //Handle a capture jump
+            else if (rowDistance == 2) {
+
+                if (!isValidJump(fromRow, fromCol, toRow, toCol)) {
+                	
+                    invalidMove(sender, "Invalid jump.");                    
+                    return;
+                }
+
+                executeJump(fromRow, fromCol, toRow, toCol);
+            }
+
+            //Handles invalid movement distance
+            else {
+            	
+                invalidMove(sender, "Invalid movement distance.");                
+                return;
+            }
+        }
+
+        //Update both clients with the new board state
+        updateBoard();
+
+        //Check whether the game has ended
+        if (gameOver) {
+            notifyGameOver();
+        }
     }
     
     //Sends game over to both clients only when game ends
     private void notifyGameOver() {
-    	
+
+        //Create game over message
+        GameMessage message = new GameMessage(GameMessage.GAME_OVER);
+        
+        message.setIsGameOver(true);
+        
+        message.setCurrentTurn(currentTurn);
+        
+        message.setMessage("Game over!");
+
+        //Send message to both players
+        player1.sendMessage(message);
+        
+        player2.sendMessage(message);
+        
+        //CONSOLE MESSAGE STRICTLY FOR TESTING
+        System.out.println("Game over!");
     }
     
     //Handle a player disconnect 
-    private void handleDisconnect() {
-    	
+    public synchronized void handlePlayerDisconnect(ClientHandler player) {
+
+        //Check if game is already over
+        if (gameOver) {        	
+            return;
+            
+        }
+
+        //Verify player belongs to this game
+        if (player != player1 && player != player2) {
+        	
+            return;
+            
+        }
+        //End the game
+        gameOver = true;
+
+        //Determine which player disconnected
+        String disconnectedPlayer;
+
+        if (player == player1) {
+        	
+            disconnectedPlayer = "Red";
+            
+        } 
+        else {
+        	
+            disconnectedPlayer = "Black";
+        }
+
+        //Create disconnect message
+        GameMessage message = new GameMessage(GameMessage.OPPONENT_LEFT);
+        
+        message.setIsGameOver(true);
+        
+        message.setMessage(disconnectedPlayer + " player disconnected. The game has ended.");
+
+        //Notify both players
+        player1.sendMessage(message);
+        
+        player2.sendMessage(message);
+
+        //CONSOLE MESSAGE STRICTLY FOR TESTING 
+        System.out.println(disconnectedPlayer + " player disconnected. Game ended.");
     }
 }
     
