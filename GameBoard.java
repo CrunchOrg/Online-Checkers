@@ -4,16 +4,13 @@ import com.google.gson.JsonSyntaxException;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.geom.Path2D;
 
 public class GameBoard extends JFrame {
     //piece constants
     public static final int EMPTY = 0;
     public static final int RED = 1;
-    public static final int RED_KING = 2;
-    public static final int BLACK = 3;
+    public static final int BLACK = 2;
+    public static final int RED_KING = 3;
     public static final int BLACK_KING = 4;
 
     //turn constants
@@ -60,13 +57,41 @@ public class GameBoard extends JFrame {
         this.username = username;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    public int getPieceAt(int row, int col) {
+        return boardState[row][col];
+    }
+
+    public int getSelectedRow() {
+        return selectedRow;
+    }
+
+    public int getSelectedCol() {
+        return selectedCol;
+    }
+
+    public void setSelectedSquare(int row, int col) {
+        clearSelection();
+        this.selectedRow = row;
+        this.selectedCol = col;
+        if (visualSquares != null) {
+            visualSquares[row][col].setSelected(true);
+        }
+        if (boardPanel != null) {
+            boardPanel.repaint();
+        }
+    }
+
     //creates main JFrame, turn label, and 8x8 grid container
     public void createBoard() {
         mainFrame = new JFrame("Checkers");
         mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mainFrame.setLayout(new BorderLayout());
 
-        turnLabel = new JLabel("Waiting for sever...", SwingConstants.CENTER);
+        turnLabel = new JLabel("Waiting for server...", SwingConstants.CENTER);
         turnLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
         turnLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         mainFrame.add(turnLabel, BorderLayout.NORTH);
@@ -83,7 +108,7 @@ public class GameBoard extends JFrame {
         boardPanel.removeAll();
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
-                BoardSquare square = new BoardSquare(r, c);
+                BoardSquare square = new BoardSquare(r, c, this);
                 visualSquares[r][c] = square;
                 boardPanel.add(square);
             }
@@ -132,6 +157,9 @@ public class GameBoard extends JFrame {
 
     //clears currently selected square highlight
     public void clearSelection() {
+        if (selectedRow != -1 && selectedCol != -1 && visualSquares != null) {
+            visualSquares[selectedRow][selectedCol].setSelected(false);
+        }
         selectedRow = -1;
         selectedCol = -1;
         if (boardPanel != null) {
@@ -249,128 +277,4 @@ public class GameBoard extends JFrame {
             );
         }
     }
-
-    private void handleSquareClick(int row, int col) {
-        //first click: select any occupied square (server enforces turn and ownership)
-        if (selectedRow == -1) {
-            if (boardState[row][col] != EMPTY) {
-                selectedRow = row;
-                selectedCol = col;
-                boardPanel.repaint();
-            }
-            return;
-        }
-        //clicking the same square deselects
-        if (selectedRow == row && selectedCol == col) {
-            clearSelection();
-            return;
-        }
-
-        //clicking another piece switches selection
-        if (boardState[row][col] != EMPTY) {
-            selectedRow = row;
-            selectedCol = col;
-            boardPanel.repaint();
-            return;
-        }
-
-        //second click on an empty square: build GameMessage.MOVE and send via Client
-        int fromR = selectedRow;
-        int fromC = selectedCol;
-        clearSelection();
-
-        if (client != null) {
-            GameMessage moveMsg = new GameMessage (
-                GameMessage.MOVE,
-                username,
-                fromR,
-                fromC,
-                row,
-                col
-            );
-            client.sendMove(moveMsg.toJson());
-        }
-    }
-
-    //represents one of the 64 graphical squares on the board
-    private class BoardSquare extends JPanel {
-        private final int row;
-        private final int col;
-
-        public BoardSquare(int row, int col) {
-            this.row = row;
-            this.col = col;
-
-            addMouseListener(new MouseAdapter() {
-                @Override 
-                public void mousePressed(MouseEvent e) {
-                    handleSquareClick(row, col);
-                }
-            });
-        }
-
-        @Override 
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2 = (Graphics2D) g;
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            //draw square background
-            boolean isDark = (row + col) % 2 != 0;
-            g2.setColor(isDark ? new Color(118, 150, 86) : new Color(238, 238, 210));
-            g2.fillRect(0, 0, getWidth(), getHeight());
-
-            //selected square highlight
-            if (row == selectedRow && col == selectedCol) {
-                g2.setColor(new Color(255, 255, 0, 120));
-                g2.fillRect(0, 0, getWidth(), getHeight());
-                g2.setColor(Color.YELLOW);
-                g2.setStroke(new BasicStroke(3));
-                g2.drawRect(1, 1, getWidth() - 3, getHeight() - 3);
-            }
-
-            //draw piece
-            int piece = boardState[row][col];
-            if (piece == EMPTY) {
-                return;
-            }
-
-            int padding = Math.min(getWidth(), getHeight()) / 6;
-            int diameter = Math.min(getWidth(), getHeight()) - (padding * 2);
-            int x = (getWidth() - diameter) / 2;
-            int y = (getHeight() - diameter) / 2;
-
-            boolean isRed = (piece == RED || piece == RED_KING);
-            g2.setColor(isRed ? new Color(200, 40, 40) : new Color(35,35, 35));
-            g2.fillOval(x, y, diameter, diameter);
-
-            g2.setColor(isRed ? new Color(130, 20, 20) : new Color(80, 80, 80));
-            g2.setStroke(new BasicStroke(2));
-            g2.drawOval(x, y, diameter, diameter);
-
-            //draw crown for king pieces
-            if (piece == RED_KING || piece == BLACK_KING) {
-                drawCrown(g2, getWidth() / 2.0, getHeight() / 2.0, diameter * 0.45);
-            }
-        }
-        private void drawCrown(Graphics2D g2, double cx, double cy, double size) {
-            double half = size / 2.0;
-            Path2D crown = new Path2D.Double();
-            crown.moveTo(cx - half, cy + half * 0.6);
-            crown.lineTo(cx - half, cy - half * 0.4);
-            crown.lineTo(cx - half * 0.4, cy + half * 0.1);
-            crown.lineTo(cx, cy - half * 0.6);
-            crown.lineTo(cx + half * 0.4, cy + half * 0.1);
-            crown.lineTo(cx + half, cy - half * 0.4);
-            crown.lineTo(cx + half, cy + half * 0.6);
-            crown.closePath();
-
-            g2.setColor(new Color(255, 215, 0));
-            g2.fill(crown);
-            g2.setColor(new Color(180, 140, 0));
-            g2.setStroke(new BasicStroke(1.2f));
-            g2.draw(crown);
-        }
-    }    
 }
-
