@@ -1,4 +1,4 @@
-package main.java.checkers;
+package checkers;
 
 import com.google.gson.JsonSyntaxException;
 
