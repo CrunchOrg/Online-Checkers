@@ -16,6 +16,10 @@ public class ClientHandler implements Runnable {
     private GameSession gameSession;
     private final List<ClientHandler> activeHandlers;
     private String username;
+    
+    private volatile boolean closed = false; // this variable is used so threads don't use stale cached values. tbh i don't fully get this
+    										 // i read that this would be very helpful for running a lot of ClientHandler instances ¯\_(:/)_/¯
+    										 // used in the closeEverything() method
 
     /* creates handler for a connected client
     * @param socket             the clients socket connection
@@ -62,7 +66,7 @@ public class ClientHandler implements Runnable {
                 }
                 handleMessage(incoming);
 
-                if (GameMessage.DISCONNECT.equals(incoming.getAction())); {
+                if (GameMessage.DISCONNECT.equals(incoming.getAction())) {
                     break;
                 }
             }
@@ -78,7 +82,7 @@ public class ClientHandler implements Runnable {
         }
        out.println(message.toJson());
        if (out.checkError()) {
-        closeEverything();
+    	   closeEverything();
        }
     }
 
@@ -88,13 +92,24 @@ public class ClientHandler implements Runnable {
             return null;
         }
         try {
-            String line = in.readLine();
-            return GameMessage.fromJson(line);
-        } catch (JsonSyntaxException e) {
-            sendMessage(new GameMessage(GameMessage.ERROR, "Invalid JSON format recieved."));
-            return null;
+            String line;
+            while ((line = in.readLine()) != null) { // null here = client disconnected
+            	if (line.isBlank()) {
+            		continue; // ignore empty lines
+            	}
+            	try {
+            		GameMessage message = GameMessage.fromJson(line);
+            		if (message != null) {
+            			return message; //normal case
+            		}
+            	} catch (JsonSyntaxException e) {
+            		sendMessage(new GameMessage(GameMessage.ERROR, "Invalid JSON format received."));
+            		// fall through and read next line
+            	}
+            }
+            return null; // stream ended: client is gone
         } catch (IOException e) {
-            return null;
+        	return null; // connection broken
         }
     }
 
@@ -104,20 +119,46 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        // capture username when the client sends CONNECT
-        if (GameMessage.CONNECT.equals(message.getAction()) && message.getUsername() != null) {
-            this.username = message.getUsername();
-        }
+        switch (message.getAction()) {
         
-        if (gameSession!= null) {
-            gameSession.handleClientMessage(this, message);
-        } else {
-            sendMessage(new GameMessage(GameMessage.WAITING, "Connected to server. Waiting for a game session..."));
+        	case GameMessage.CONNECT: 
+        		if (message.getUsername() != null) {
+        			this.username = message.getUsername();
+        		}
+        		if (gameSession == null) {
+        			sendMessage(new GameMessage(GameMessage.WAITING, "Connected. Waiting for an opponent..."));
+        		}
+        		break;
+        		
+        	case GameMessage.MOVE:
+        		if (gameSession != null) {
+        			gameSession.processMove(message, this);
+        		} else {
+        			sendMessage(new GameMessage(GameMessage.ERROR, "No game in progress yet."));
+        		}
+        		break;
+        		
+        	case GameMessage.DISCONNECT: // run() ends the loop; closeEverything() handles cleanup
+        		break;
+        		
+        	case GameMessage.RESET: //FIXME: This is not implemented yet since GameSession will need to handle this logic. Just throws an error for now without ending game.
+        		sendMessage(new GameMessage(GameMessage.ERROR, "Reset is not available yet."));
+        		System.out.println("RESET requested by " + username + " (not implemented yet)");
+        		break;
+        		
+        	default:
+        		sendMessage(new GameMessage(GameMessage.ERROR, "Unsupported action: " + message.getAction()));
+        		break;
         }
     }
 
     //removes this handler from any shared connection list, notifies the session, and closes all I/O streams and the socket
     public void closeEverything() {
+    	if (closed) { // double check if this method has already run just in case
+    		return;
+    	}
+    	closed = true;
+    	
         if (activeHandlers != null) {
             synchronized (activeHandlers) {
                 activeHandlers.remove(this);
