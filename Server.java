@@ -41,7 +41,7 @@ public class Server {
 
             System.out.println("Server started on port " + PORT);
 
-            //Begin accepting incoming connections
+            //Begin accepting clients
             acceptConnections();
 
         } catch (IOException e) {
@@ -50,47 +50,64 @@ public class Server {
     }
 
 
-    //Accepts incoming client connections
+ //Continuously accepts incoming client connections
     private void acceptConnections() {
 
-        //Continue accepting connections while server is running
+        while (running) {
+            try {
+                //Wait for a client to connect
+                Socket socket = serverSocket.accept();
 
-        //Accept incoming socket
+                //Handle the newly connected client
+                handleClient(socket);
 
-        //Pass socket to handleClient()
-
+            } catch (IOException e) {
+                if (running) {
+                    System.err.println("Error accepting client: " + e.getMessage());
+                }
+            }
+        }
     }
 
 
     //Handles a newly connected client
     private void handleClient(Socket socket) {
 
-        //Create a ClientHandler for the socket
+        //Create a ClientHandler for the connected client
+        ClientHandler client = new ClientHandler(socket, clients);
 
-        //Add ClientHandler to active clients
+        //Add client to the active client list
+        synchronized (clients) {
+            clients.add(client);
+        }
 
-        //Start ClientHandler thread
+        //Start the client's communication thread
+        Thread clientThread = new Thread(client);
+        clientThread.start();
 
-        //Add client to waiting player queue
+        //Add client to the waiting queue
+        synchronized (waitingPlayers) {
+            waitingPlayers.add(client);
+        }
 
-        //Attempt to pair players
-
+        //Call pairPlayers to check if two players are in queue
+        pairPlayers();
     }
 
 
-    //Pairs two waiting players together
+    //Pairs waiting players together when two are available
     private synchronized void pairPlayers() {
 
-        //Check if at least two players are waiting
+        //Continuously checks if at least two players are waiting
+        while (waitingPlayers.size() >= 2) {
 
-        //Remove first waiting player
+            //Remove the first two players from the queue and assign them to a player
+            ClientHandler player1 = waitingPlayers.poll();
+            ClientHandler player2 = waitingPlayers.poll();
 
-        //Remove second waiting player
-
-        //Create a GameSession for both players
-
-        //Start the GameSession
-
+            //Call createGameSession for the two players
+            createGameSession(player1, player2);
+        }
     }
 
 
