@@ -12,7 +12,7 @@ public class Server {
     private ServerSocket serverSocket;
     private ArrayList<ClientHandler> clients;
     private Queue<ClientHandler> waitingPlayers;
-    private boolean running;
+    private volatile boolean running;
 
     //Port number
     private static final int PORT = 1234;
@@ -81,14 +81,14 @@ public class Server {
             clients.add(client);
         }
 
-        //Start the client's communication thread
-        Thread clientThread = new Thread(client);
-        clientThread.start();
-
-        //Add client to the waiting queue
+        //Add client to the waitingPlayers queue
         synchronized (waitingPlayers) {
             waitingPlayers.add(client);
         }
+
+        //Start the client's communication thread
+        Thread clientThread = new Thread(client);
+        clientThread.start();
 
         //Call pairPlayers to check if two players are in queue
         pairPlayers();
@@ -96,16 +96,25 @@ public class Server {
 
 
     //Pairs waiting players together when two are available
-    private synchronized void pairPlayers() {
+    private void pairPlayers() {
+    	//Continuously loop while server is running 
+        while (running) {
 
-        //Continuously checks if at least two players are waiting
-        while (waitingPlayers.size() >= 2) {
-
-            //Remove the first two players from the queue and assign them to a player
-            ClientHandler player1 = waitingPlayers.poll();
-            ClientHandler player2 = waitingPlayers.poll();
-
-            //Call createGameSession for the two players
+            ClientHandler player1;
+            ClientHandler player2;
+            
+            //Sync waitingPlayers queue between classes
+            synchronized (waitingPlayers) {
+            	
+            	//When players waiting is less then 2, return
+                if (waitingPlayers.size() < 2) {
+                    return;
+                }
+                //Pull first two players from waitingPlayer queue
+                player1 = waitingPlayers.poll();
+                player2 = waitingPlayers.poll();
+            }
+            //Call createGameSession to start the game 
             createGameSession(player1, player2);
         }
     }
@@ -115,11 +124,16 @@ public class Server {
     private void createGameSession(ClientHandler player1, ClientHandler player2) {
 
         //Create a new GameSession
+        GameSession gameSession = new GameSession(player1, player2);
 
-        //Associate the GameSession with both ClientHandlers
+        //Assign the GameSession to both players
+        player1.setGameSession(gameSession);
+        player2.setGameSession(gameSession);
 
         //Start the game
+        gameSession.startGame();
 
+        System.out.println("New game session created!");
     }
 
 
