@@ -26,9 +26,12 @@ public class Server {
         running = false;
         
     }
+    //Start the server
+    public static void main(String[] args) {
+        Server server = new Server();
+        server.startServer();
+    }
 
-
-    
     //Starts the server and begins listening for client connections
     public void startServer() {
 
@@ -137,29 +140,71 @@ public class Server {
     }
 
 
-    //Removes a disconnected client
-    public synchronized void removeClient(ClientHandler client) {
-
-        //Remove client from active clients
-
-        //Remove client from waiting player queue
-
-        //Handle any necessary cleanup
-
+  //Removes a disconnected client
+    public void removeClient(ClientHandler client) {
+    	
+    	// Immediately return if there is no client
+    	if (client == null) {
+    		return;
+    	}
+    	
+    	// initial clients for removal
+    	int remaining;
+    	boolean wasWaiting;
+    	
+    	// 
+    	synchronized (clients) {
+    		clients.remove(client);
+    		remaining = clients.size();
+    	}
+    	
+    	// 
+    	synchronized (waitingPlayers) {
+    		wasWaiting = waitingPlayers.remove(client);
+    	}
+    	
+    	String name = (client.getUsername() != null) ? client.getUsername() : "A player";
+    	System.out.println(name + " disconnected" + (wasWaiting ? " while waiting for an opponent" : "") + ". Connected clients: " + remaining); 
     }
 
 
     //Stops the server
     public void stopServer() {
-
+    	
         //Set running to false
+    	if (!running) {
+    		return;
+    	}
+    	running = false;
 
         //Close server socket
+    	try {
+    		if (serverSocket != null && !serverSocket.isClosed()) {
+    			serverSocket.close();
+    		}
+    	} catch (IOException e) {
+    		System.err.println("Error closing server socket: " + e.getMessage());
+    	}
+    	
+    	ArrayList<ClientHandler> copy;
+    	synchronized (clients) {
+    		copy = new ArrayList<> (clients);
+    	}
 
-        //Close active client connections
-
-        //Clear client collections
-
+    	for (ClientHandler client : copy) {
+    		client.sendMessage(new GameMessage(GameMessage.ERROR, "Server is shutting down."));
+    		
+    		client.closeEverything();
+    	}
+    	
+    	synchronized (clients) {
+    		clients.clear();
+    	}
+    	
+    	synchronized (waitingPlayers) {
+    		waitingPlayers.clear();
+    	}
+    	
+    	System.out.println("Server stopped.");
     }
-
 }
