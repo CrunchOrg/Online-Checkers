@@ -13,7 +13,7 @@ public class Server {
     private ServerSocket serverSocket;
     private ArrayList<ClientHandler> clients;
     private Queue<ClientHandler> waitingPlayers;
-    private boolean running;
+    private volatile boolean running;
 
     //Port number
     private static final int PORT = 1234;
@@ -27,9 +27,12 @@ public class Server {
         running = false;
         
     }
+    //Start the server
+    public static void main(String[] args) {
+        Server server = new Server();
+        server.startServer();
+    }
 
-
-    
     //Starts the server and begins listening for client connections
     public void startServer() {
 
@@ -42,7 +45,7 @@ public class Server {
 
             System.out.println("Server started on port " + PORT);
 
-            //Begin accepting incoming connections
+            //Begin accepting clients
             acceptConnections();
 
         } catch (IOException e) {
@@ -51,47 +54,73 @@ public class Server {
     }
 
 
-    //Accepts incoming client connections
+ //Continuously accepts incoming client connections
     private void acceptConnections() {
 
-        //Continue accepting connections while server is running
+        while (running) {
+            try {
+                //Wait for a client to connect
+                Socket socket = serverSocket.accept();
 
-        //Accept incoming socket
+                //Handle the newly connected client
+                handleClient(socket);
 
-        //Pass socket to handleClient()
-
+            } catch (IOException e) {
+                if (running) {
+                    System.err.println("Error accepting client: " + e.getMessage());
+                }
+            }
+        }
     }
 
 
     //Handles a newly connected client
     private void handleClient(Socket socket) {
 
-        //Create a ClientHandler for the socket
+        //Create a ClientHandler for the connected client
+        ClientHandler client = new ClientHandler(socket, clients);
 
-        //Add ClientHandler to active clients
+        //Add client to the active client list
+        synchronized (clients) {
+            clients.add(client);
+        }
 
-        //Start ClientHandler thread
+        //Add client to the waitingPlayers queue
+        synchronized (waitingPlayers) {
+            waitingPlayers.add(client);
+        }
 
-        //Add client to waiting player queue
+        //Start the client's communication thread
+        Thread clientThread = new Thread(client);
+        clientThread.start();
 
-        //Attempt to pair players
-
+        //Call pairPlayers to check if two players are in queue
+        pairPlayers();
     }
 
 
-    //Pairs two waiting players together
-    private synchronized void pairPlayers() {
+    //Pairs waiting players together when two are available
+    private void pairPlayers() {
+    	//Continuously loop while server is running 
+        while (running) {
 
-        //Check if at least two players are waiting
-
-        //Remove first waiting player
-
-        //Remove second waiting player
-
-        //Create a GameSession for both players
-
-        //Start the GameSession
-
+            ClientHandler player1;
+            ClientHandler player2;
+            
+            //Sync waitingPlayers queue between classes
+            synchronized (waitingPlayers) {
+            	
+            	//When players waiting is less then 2, return
+                if (waitingPlayers.size() < 2) {
+                    return;
+                }
+                //Pull first two players from waitingPlayer queue
+                player1 = waitingPlayers.poll();
+                player2 = waitingPlayers.poll();
+            }
+            //Call createGameSession to start the game 
+            createGameSession(player1, player2);
+        }
     }
 
 
@@ -99,37 +128,84 @@ public class Server {
     private void createGameSession(ClientHandler player1, ClientHandler player2) {
 
         //Create a new GameSession
+        GameSession gameSession = new GameSession(player1, player2);
 
-        //Associate the GameSession with both ClientHandlers
+        //Assign the GameSession to both players
+        player1.setGameSession(gameSession);
+        player2.setGameSession(gameSession);
 
         //Start the game
+        gameSession.startGame();
 
+        System.out.println("New game session created!");
     }
 
 
-    //Removes a disconnected client
-    public synchronized void removeClient(ClientHandler client) {
-
-        //Remove client from active clients
-
-        //Remove client from waiting player queue
-
-        //Handle any necessary cleanup
-
+  //Removes a disconnected client
+    public void removeClient(ClientHandler client) {
+    	
+    	// Immediately return if there is no client
+    	if (client == null) {
+    		return;
+    	}
+    	
+    	// initial clients for removal
+    	int remaining;
+    	boolean wasWaiting;
+    	
+    	// 
+    	synchronized (clients) {
+    		clients.remove(client);
+    		remaining = clients.size();
+    	}
+    	
+    	// 
+    	synchronized (waitingPlayers) {
+    		wasWaiting = waitingPlayers.remove(client);
+    	}
+    	
+    	String name = (client.getUsername() != null) ? client.getUsername() : "A player";
+    	System.out.println(name + " disconnected" + (wasWaiting ? " while waiting for an opponent" : "") + ". Connected clients: " + remaining); 
     }
 
 
     //Stops the server
     public void stopServer() {
-
+    	
         //Set running to false
+    	if (!running) {
+    		return;
+    	}
+    	running = false;
 
         //Close server socket
+    	try {
+    		if (serverSocket != null && !serverSocket.isClosed()) {
+    			serverSocket.close();
+    		}
+    	} catch (IOException e) {
+    		System.err.println("Error closing server socket: " + e.getMessage());
+    	}
+    	
+    	ArrayList<ClientHandler> copy;
+    	synchronized (clients) {
+    		copy = new ArrayList<> (clients);
+    	}
 
-        //Close active client connections
-
-        //Clear client collections
-
+    	for (ClientHandler client : copy) {
+    		client.sendMessage(new GameMessage(GameMessage.ERROR, "Server is shutting down."));
+    		
+    		client.closeEverything();
+    	}
+    	
+    	synchronized (clients) {
+    		clients.clear();
+    	}
+    	
+    	synchronized (waitingPlayers) {
+    		waitingPlayers.clear();
+    	}
+    	
+    	System.out.println("Server stopped.");
     }
-
 }
