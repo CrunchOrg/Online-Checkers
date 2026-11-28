@@ -54,7 +54,7 @@ public class Client {
 
     public static void main(String[] args) {
         String username = JOptionPane.showInputDialog("Enter your username:");
-        String serverAddress = "localhost"; // Change this to your server's address
+        String serverAddress = JOptionPane.showInputDialog("Server address:", "localhost");// Change this to your server's address
         int port = 1234; // Change this to your server's port
 
         try {
